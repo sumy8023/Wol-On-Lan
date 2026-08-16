@@ -45,6 +45,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
@@ -56,6 +57,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -99,6 +101,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -121,10 +126,12 @@ import kotlinx.coroutines.delay
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 
 private enum class MainScreen { Devices, Settings }
 
 private val PanelShape = RoundedCornerShape(8.dp)
+private const val PROJECT_URL = "https://github.com/sumy8023/Wol-On-Lan"
 
 @Composable
 fun WolApp(viewModel: WolViewModel) {
@@ -915,6 +922,9 @@ private fun SettingsScreen(
     var groupsExpanded by rememberSaveable { mutableStateOf(false) }
     var proxyNodesExpanded by rememberSaveable { mutableStateOf(false) }
     var aboutExpanded by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
 
     LazyColumn(
         modifier = Modifier
@@ -1001,6 +1011,28 @@ private fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Text("项目地址", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(0.85f),
+                            onClick = { uriHandler.openUri(PROJECT_URL) }
+                        ) {
+                            Text(PROJECT_URL, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.width(6.dp))
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                        IconButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(PROJECT_URL))
+                                Toast.makeText(context, "项目地址已复制", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "复制项目地址")
+                        }
+                    }
                 }
             }
         }

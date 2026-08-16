@@ -70,6 +70,18 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .brand-lockup { gap: 11px; min-width: 0; }
 .brand-lockup h1 { margin: 1px 0 0; font-size: 20px; line-height: 1.2; letter-spacing: 0; }
+.github-link {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--ink);
+  transition: background-color .15s ease, color .15s ease;
+}
+.github-link:hover { background: var(--surface-muted); color: var(--blue-dark); }
+.github-link svg { width: 24px; height: 24px; }
 .brand-mark {
   display: grid;
   width: 38px;
