@@ -1,0 +1,529 @@
+#!/usr/bin/env sh
+set -eu
+
+umask 077
+
+SERVICE_NAME="wol-proxy.service"
+SERVICE_USER="wol-proxy"
+INSTALL_DIR="/opt/wol-proxy"
+DATA_DIR="/var/lib/wol-proxy"
+CONFIG_FILE="$DATA_DIR/config.yml"
+TOKEN_SIDECAR="$CONFIG_FILE.admin-token"
+DEFAULT_CONFIG_FILE="$INSTALL_DIR/config.example.yml"
+BACKUP_ROOT="$DATA_DIR/backups"
+UNIT_FILE="/etc/systemd/system/$SERVICE_NAME"
+COMMAND=${1:-menu}
+
+usage() {
+  cat <<'EOF'
+WOL Proxy 服务维护菜单
+
+用法：
+  wol                              打开交互菜单
+  wol stop                         停止服务
+  wol restart                      重启服务
+  wol reset-admin-key [--yes]      重置管理员密钥并显示一次新密钥
+  wol reset-config [--yes]         备份并恢复默认配置
+  wol uninstall [--purge]          卸载服务（默认保留配置和日志）
+EOF
+}
+
+become_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    return 0
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "错误：此操作需要管理员权限，请使用 root 执行。" >&2
+    exit 1
+  fi
+  exec sudo "$0" "$@"
+}
+
+validate_targets() {
+  case "$INSTALL_DIR:$DATA_DIR:$CONFIG_FILE:$TOKEN_SIDECAR:$DEFAULT_CONFIG_FILE:$UNIT_FILE" in
+    /opt/wol-proxy:/var/lib/wol-proxy:/var/lib/wol-proxy/config.yml:/var/lib/wol-proxy/config.yml.admin-token:/opt/wol-proxy/config.example.yml:/etc/systemd/system/wol-proxy.service) ;;
+    *) echo "错误：维护目标路径校验失败。" >&2; exit 1 ;;
+  esac
+}
+
+require_systemd() {
+  if ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; then
+    echo "错误：当前系统没有正在运行的 systemd。" >&2
+    exit 1
+  fi
+  if [ -L "$UNIT_FILE" ] || [ ! -f "$UNIT_FILE" ]; then
+    echo "错误：未找到已安装的 $SERVICE_NAME，请先运行 start-linux.sh。" >&2
+    exit 1
+  fi
+}
+
+validate_reset_targets() {
+  wol_require_default=$1
+  validate_targets
+  require_systemd
+
+  if [ -L "$INSTALL_DIR" ] || [ ! -d "$INSTALL_DIR" ] || [ -L "$DATA_DIR" ] || [ ! -d "$DATA_DIR" ]; then
+    echo "错误：程序目录或数据目录不存在，或目录是符号链接。" >&2
+    exit 1
+  fi
+  if [ -L "$BACKUP_ROOT" ] || { [ -e "$BACKUP_ROOT" ] && [ ! -d "$BACKUP_ROOT" ]; }; then
+    echo "错误：备份路径必须是普通目录且不能是符号链接：$BACKUP_ROOT" >&2
+    exit 1
+  fi
+  if [ -L "$CONFIG_FILE" ] || { [ -e "$CONFIG_FILE" ] && [ ! -f "$CONFIG_FILE" ]; }; then
+    echo "错误：配置文件必须是普通文件且不能是符号链接：$CONFIG_FILE" >&2
+    exit 1
+  fi
+  if [ -L "$TOKEN_SIDECAR" ] || { [ -e "$TOKEN_SIDECAR" ] && [ ! -f "$TOKEN_SIDECAR" ]; }; then
+    echo "错误：管理员密钥文件必须是普通文件且不能是符号链接：$TOKEN_SIDECAR" >&2
+    exit 1
+  fi
+  if [ "$wol_require_default" = "1" ] && { [ -L "$DEFAULT_CONFIG_FILE" ] || [ ! -f "$DEFAULT_CONFIG_FILE" ]; }; then
+    echo "错误：安装目录缺少默认配置，请重新运行新版 start-linux.sh 升级：$DEFAULT_CONFIG_FILE" >&2
+    exit 1
+  fi
+  if ! id "$SERVICE_USER" >/dev/null 2>&1; then
+    echo "错误：服务用户不存在：$SERVICE_USER" >&2
+    exit 1
+  fi
+  if ! command -v journalctl >/dev/null 2>&1; then
+    echo "错误：系统缺少 journalctl，无法安全取得本次生成的新管理员密钥。" >&2
+    exit 1
+  fi
+  if ! journalctl --no-pager -n 0 >/dev/null 2>&1; then
+    echo "错误：无法读取 systemd 日志，未执行重置。" >&2
+    exit 1
+  fi
+}
+
+stop_service() {
+  become_root stop
+  require_systemd
+  systemctl stop "$SERVICE_NAME"
+  echo "WOL Proxy 服务已停止。"
+}
+
+restart_service() {
+  become_root restart
+  require_systemd
+  systemctl restart "$SERVICE_NAME"
+  echo "WOL Proxy 服务已重启。"
+}
+
+confirm_action() {
+  wol_prompt=$1
+  wol_expected=$2
+  printf '%s' "$wol_prompt"
+  if ! read -r wol_answer; then
+    echo >&2
+    echo "已取消。" >&2
+    return 1
+  fi
+  if [ "$wol_answer" != "$wol_expected" ]; then
+    echo "已取消。"
+    return 1
+  fi
+  return 0
+}
+
+backup_current_config() {
+  wol_action=$1
+  if ! install -d -m 0700 "$BACKUP_ROOT"; then
+    return 1
+  fi
+  chmod 0700 "$BACKUP_ROOT" || return 1
+  wol_stamp=$(date '+%Y%m%d-%H%M%S' 2>/dev/null || printf 'unknown-time')
+  BACKUP_DIR=$(mktemp -d "$BACKUP_ROOT/${wol_action}-${wol_stamp}.XXXXXX") || return 1
+  chmod 0700 "$BACKUP_DIR" || return 1
+
+  if [ -f "$CONFIG_FILE" ]; then
+    cp "$CONFIG_FILE" "$BACKUP_DIR/config.yml" || return 1
+    chmod 0600 "$BACKUP_DIR/config.yml" || return 1
+  else
+    : >"$BACKUP_DIR/config.yml.absent" || return 1
+  fi
+  if [ -f "$TOKEN_SIDECAR" ]; then
+    # Copy the verifier as an opaque file. Its contents never enter a shell variable.
+    cp "$TOKEN_SIDECAR" "$BACKUP_DIR/config.yml.admin-token" || return 1
+    chmod 0600 "$BACKUP_DIR/config.yml.admin-token" || return 1
+  else
+    : >"$BACKUP_DIR/config.yml.admin-token.absent" || return 1
+  fi
+}
+
+write_regeneration_config() {
+  wol_source=$1
+  [ -f "$wol_source" ] || return 1
+  wol_group=$(id -gn "$SERVICE_USER") || return 1
+  wol_config_tmp=$(mktemp "$DATA_DIR/.config.yml.XXXXXX") || return 1
+
+  if ! awk '
+    {
+      line = $0
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ /^(admin_token|admin_password)[[:space:]]*:/) next
+      print
+    }
+  ' "$wol_source" >"$wol_config_tmp"; then
+    rm -f "$wol_config_tmp"
+    return 1
+  fi
+  if ! printf '\n# 由 wol 维护命令触发一次性管理员密钥重置。\nadmin_token: ""\n' >>"$wol_config_tmp"; then
+    rm -f "$wol_config_tmp"
+    return 1
+  fi
+  if ! chown "$SERVICE_USER:$wol_group" "$wol_config_tmp" || ! chmod 0640 "$wol_config_tmp"; then
+    rm -f "$wol_config_tmp"
+    return 1
+  fi
+  if ! mv -f "$wol_config_tmp" "$CONFIG_FILE"; then
+    rm -f "$wol_config_tmp"
+    return 1
+  fi
+}
+
+restore_backup() {
+  case "${BACKUP_DIR:-}" in
+    "$BACKUP_ROOT"/*) ;;
+    *) echo "错误：拒绝从未校验的目录恢复配置。" >&2; return 1 ;;
+  esac
+  wol_group=$(id -gn "$SERVICE_USER") || return 1
+
+  rm -f "$CONFIG_FILE" "$TOKEN_SIDECAR"
+  if [ -f "$BACKUP_DIR/config.yml" ]; then
+    install -o "$SERVICE_USER" -g "$wol_group" -m 0640 "$BACKUP_DIR/config.yml" "$CONFIG_FILE" || return 1
+  fi
+  if [ -f "$BACKUP_DIR/config.yml.admin-token" ]; then
+    install -o "$SERVICE_USER" -g "$wol_group" -m 0600 "$BACKUP_DIR/config.yml.admin-token" "$TOKEN_SIDECAR" || return 1
+  fi
+}
+
+current_invocation_logs() {
+  wol_invocation_id=$1
+  [ -n "$wol_invocation_id" ] || return 0
+  journalctl --no-pager -o cat "_SYSTEMD_INVOCATION_ID=$wol_invocation_id" 2>/dev/null || true
+}
+
+wol_extract_admin_url() {
+  printf '%s\n' "$1" | grep -Eo 'http://(\[[^]]+\]|[^[:space:]/:]+):[0-9]+/[^[:space:]]+/' | sed -n '1p'
+}
+
+wol_extract_first_token() {
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    {
+      labels[1] = "首次生成的管理令牌"
+      labels[2] = "本次生成的管理令牌"
+      for (i = 1; i <= 2; i++) {
+        if (index($0, labels[i])) {
+          value = substr($0, index($0, labels[i]) + length(labels[i]))
+          sub(/^:/, "", value)
+          sub(/^[^!-~]*/, "", value)
+          print value
+          exit
+        }
+      }
+    }
+  '
+}
+
+wol_yaml_scalar_value() {
+  wol_yaml_file=$1
+  wol_yaml_key=$2
+  [ -f "$wol_yaml_file" ] || return 1
+  wol_yaml_value=$(awk -v key="$wol_yaml_key" '
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*:" {
+      line = $0
+      sub("^[[:space:]]*" key "[[:space:]]*:[[:space:]]*", "", line)
+      sub(/[[:space:]]+#.*$/, "", line)
+      sub(/^[[:space:]]+/, "", line)
+      sub(/[[:space:]]+$/, "", line)
+      print line
+      exit
+    }
+  ' "$wol_yaml_file")
+  case "$wol_yaml_value" in
+    \"*\") wol_yaml_value=${wol_yaml_value#\"}; wol_yaml_value=${wol_yaml_value%\"} ;;
+    \'*\') wol_yaml_value=${wol_yaml_value#\'}; wol_yaml_value=${wol_yaml_value%\'} ;;
+  esac
+  printf '%s\n' "$wol_yaml_value"
+}
+
+wol_ipv4_from_route_output() {
+  printf '%s\n' "$1" | awk '
+    {
+      for (i = 1; i < NF; i++) {
+        if ($i == "src" && $(i + 1) ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {
+          print $(i + 1)
+          exit
+        }
+      }
+    }
+  '
+}
+
+wol_ipv4_from_address_list() {
+  printf '%s\n' "$1" | awk '
+    {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ && $i !~ /^127\./ && $i !~ /^169\.254\./) {
+          print $i
+          exit
+        }
+      }
+    }
+  '
+}
+
+wol_first_reachable_ipv4() {
+  if command -v ip >/dev/null 2>&1; then
+    wol_route=$(ip -4 route get 1.1.1.1 2>/dev/null || true)
+    wol_ip=$(wol_ipv4_from_route_output "$wol_route")
+    if [ -n "$wol_ip" ]; then
+      printf '%s\n' "$wol_ip"
+      return 0
+    fi
+    wol_addresses=$(ip -o -4 addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | tr '\n' ' ' || true)
+    wol_ip=$(wol_ipv4_from_address_list "$wol_addresses")
+    if [ -n "$wol_ip" ]; then
+      printf '%s\n' "$wol_ip"
+      return 0
+    fi
+  fi
+  if command -v hostname >/dev/null 2>&1; then
+    wol_addresses=$(hostname -I 2>/dev/null || true)
+    wol_ip=$(wol_ipv4_from_address_list "$wol_addresses")
+    if [ -n "$wol_ip" ]; then
+      printf '%s\n' "$wol_ip"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+wol_admin_url_for_ipv4() {
+  wol_url=$1
+  wol_ip=$2
+  wol_listen=${3:-}
+  [ -n "$wol_url" ] || return 1
+  [ -n "$wol_ip" ] || { printf '%s\n' "$wol_url"; return 0; }
+  case "$wol_listen" in
+    127.*|localhost:*|\[::1\]:*|::1:*) printf '%s\n' "$wol_url"; return 0 ;;
+  esac
+  case "$wol_url" in
+    http://127.0.0.1:*) printf 'http://%s%s\n' "$wol_ip" "${wol_url#http://127.0.0.1}" ;;
+    http://localhost:*) printf 'http://%s%s\n' "$wol_ip" "${wol_url#http://localhost}" ;;
+    *) printf '%s\n' "$wol_url" ;;
+  esac
+}
+
+restart_and_collect_new_access() {
+  NEW_ADMIN_TOKEN=''
+  NEW_ADMIN_URL=''
+  wol_previous_invocation=$(systemctl show "$SERVICE_NAME" -p InvocationID --value 2>/dev/null || true)
+  if ! systemctl restart "$SERVICE_NAME"; then
+    return 1
+  fi
+
+  wol_attempt=0
+  while [ "$wol_attempt" -lt 30 ]; do
+    wol_current_invocation=$(systemctl show "$SERVICE_NAME" -p InvocationID --value 2>/dev/null || true)
+    if [ -n "$wol_current_invocation" ] && { [ -z "$wol_previous_invocation" ] || [ "$wol_current_invocation" != "$wol_previous_invocation" ]; }; then
+      wol_logs=$(current_invocation_logs "$wol_current_invocation")
+      NEW_ADMIN_TOKEN=$(wol_extract_first_token "$wol_logs" || true)
+      NEW_ADMIN_URL=$(wol_extract_admin_url "$wol_logs" || true)
+      wol_logs=''
+      if [ -n "$NEW_ADMIN_TOKEN" ] && [ -n "$NEW_ADMIN_URL" ] && systemctl is-active --quiet "$SERVICE_NAME"; then
+        return 0
+      fi
+    fi
+    if systemctl is-failed --quiet "$SERVICE_NAME"; then
+      return 1
+    fi
+    wol_attempt=$((wol_attempt + 1))
+    sleep 1
+  done
+  return 1
+}
+
+rollback_failed_reset() {
+  echo "重置未完成，正在恢复原配置和管理员密钥..." >&2
+  systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
+  if ! restore_backup; then
+    echo "错误：自动回滚失败。备份位于：$BACKUP_DIR" >&2
+    return 1
+  fi
+  if ! systemctl restart "$SERVICE_NAME"; then
+    echo "错误：旧配置已恢复，但服务重启失败。备份位于：$BACKUP_DIR" >&2
+    return 1
+  fi
+  echo "原配置已恢复，服务已重新启动。" >&2
+}
+
+print_new_access() {
+  wol_listen=$(wol_yaml_scalar_value "$CONFIG_FILE" listen 2>/dev/null || true)
+  wol_host_ip=$(wol_first_reachable_ipv4 || true)
+  [ -n "$wol_host_ip" ] || wol_host_ip=127.0.0.1
+  wol_reachable_url=$(wol_admin_url_for_ipv4 "$NEW_ADMIN_URL" "$wol_host_ip" "$wol_listen" || true)
+  [ -n "$wol_reachable_url" ] || wol_reachable_url=$NEW_ADMIN_URL
+
+  echo "配置备份：$BACKUP_DIR"
+  echo "Web 管理后台：$wol_reachable_url"
+  echo "新管理员密钥：$NEW_ADMIN_TOKEN"
+  echo "请立即妥善保存；该密钥只在本次重置完成时显示一次。"
+}
+
+reset_admin_key() {
+  wol_confirmed=${1:-0}
+  if [ "$wol_confirmed" != "1" ]; then
+    if ! confirm_action "旧管理员密钥将立即失效。输入 RESET-KEY 确认： " "RESET-KEY"; then
+      return 0
+    fi
+  fi
+  become_root reset-admin-key --yes
+  validate_reset_targets 0
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo "错误：找不到当前配置，不能单独重置管理员密钥：$CONFIG_FILE" >&2
+    exit 1
+  fi
+  if ! backup_current_config "admin-key-reset"; then
+    echo "错误：备份当前配置失败，未执行重置。" >&2
+    exit 1
+  fi
+  if ! write_regeneration_config "$CONFIG_FILE"; then
+    echo "错误：写入管理员密钥重置标记失败，正在恢复备份。" >&2
+    restore_backup || true
+    exit 1
+  fi
+  if ! restart_and_collect_new_access; then
+    rollback_failed_reset || true
+    echo "错误：未能从本次 systemd invocation 日志取得新管理员密钥，重置已取消。" >&2
+    exit 1
+  fi
+  echo "管理员密钥已重置，旧密钥已失效。"
+  print_new_access
+}
+
+reset_config() {
+  wol_confirmed=${1:-0}
+  if [ "$wol_confirmed" != "1" ]; then
+    if ! confirm_action "这会恢复全部默认配置，代理 Key、白名单、端口和管理入口都会重置。输入 RESET-CONFIG 确认： " "RESET-CONFIG"; then
+      return 0
+    fi
+  fi
+  become_root reset-config --yes
+  validate_reset_targets 1
+  if ! backup_current_config "config-reset"; then
+    echo "错误：备份当前配置失败，未执行重置。" >&2
+    exit 1
+  fi
+  if ! write_regeneration_config "$DEFAULT_CONFIG_FILE"; then
+    echo "错误：恢复默认配置失败，正在恢复备份。" >&2
+    restore_backup || true
+    exit 1
+  fi
+  if ! restart_and_collect_new_access; then
+    rollback_failed_reset || true
+    echo "错误：默认配置启动失败或未能取得本次新管理员密钥，重置已取消。" >&2
+    exit 1
+  fi
+  echo "配置已恢复为安装包默认值。"
+  print_new_access
+  echo "提醒：代理连接 Key 已恢复为示例值 change-this-key，请立即进入 Web 后台修改。"
+}
+
+uninstall_service() {
+  purge=${1:-0}
+  case "$purge" in
+    0|1) ;;
+    *) echo "错误：uninstall 只支持可选参数 --purge。" >&2; exit 2 ;;
+  esac
+  if [ "$(id -u)" -ne 0 ]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      echo "错误：此操作需要管理员权限，请使用 root 执行。" >&2
+      exit 1
+    fi
+    if [ "$purge" = "1" ]; then
+      exec sudo "$0" uninstall --purge
+    fi
+    exec sudo "$0" uninstall
+  fi
+  validate_targets
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
+  fi
+  rm -f "$UNIT_FILE"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload
+    systemctl reset-failed "$SERVICE_NAME" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$INSTALL_DIR"
+  rm -f /usr/local/bin/wol
+  if [ "$purge" = "1" ]; then
+    rm -rf "$DATA_DIR"
+    if id "$SERVICE_USER" >/dev/null 2>&1 && command -v userdel >/dev/null 2>&1; then
+      userdel "$SERVICE_USER" >/dev/null 2>&1 || true
+    fi
+    if command -v getent >/dev/null 2>&1 && getent group "$SERVICE_USER" >/dev/null 2>&1 && command -v groupdel >/dev/null 2>&1; then
+      groupdel "$SERVICE_USER" >/dev/null 2>&1 || true
+    fi
+    echo "WOL Proxy 已完全卸载，配置和日志已删除，无法恢复。"
+  else
+    echo "WOL Proxy 服务和程序已卸载。"
+    echo "配置和日志已保留在：$DATA_DIR"
+  fi
+}
+
+menu() {
+  printf '%s\n' \
+    "WOL Proxy 服务维护菜单" \
+    "1) 停止服务" \
+    "2) 重启服务" \
+    "3) 重置管理员密钥" \
+    "4) 重置配置" \
+    "5) 卸载服务" \
+    "6) 退出"
+  printf '请选择 [1-6]: '
+  read -r choice
+  case "$choice" in
+    1) stop_service ;;
+    2) restart_service ;;
+    3) reset_admin_key 0 ;;
+    4) reset_config 0 ;;
+    5)
+      printf '是否同时删除配置和日志？输入 yes 才会删除： '
+      read -r confirm
+      if [ "$confirm" = "yes" ]; then uninstall_service 1; else uninstall_service 0; fi
+      ;;
+    6) exit 0 ;;
+    *) echo "无效选择。" >&2; exit 2 ;;
+  esac
+}
+
+case "$COMMAND" in
+  menu) [ "$#" -eq 0 ] || { echo "错误：menu 不接受额外参数。" >&2; exit 2; }; menu ;;
+  -h|--help) [ "$#" -eq 1 ] || { echo "错误：--help 不接受额外参数。" >&2; exit 2; }; usage ;;
+  stop) [ "$#" -eq 1 ] || { echo "错误：stop 不接受额外参数。" >&2; exit 2; }; stop_service ;;
+  restart) [ "$#" -eq 1 ] || { echo "错误：restart 不接受额外参数。" >&2; exit 2; }; restart_service ;;
+  reset-admin-key)
+    case "${2:-}" in
+      '') [ "$#" -eq 1 ] || { echo "错误：reset-admin-key 只支持可选参数 --yes。" >&2; exit 2; }; reset_admin_key 0 ;;
+      --yes) [ "$#" -eq 2 ] || { echo "错误：reset-admin-key 只支持可选参数 --yes。" >&2; exit 2; }; reset_admin_key 1 ;;
+      *) echo "错误：reset-admin-key 只支持可选参数 --yes。" >&2; exit 2 ;;
+    esac
+    ;;
+  reset-config)
+    case "${2:-}" in
+      '') [ "$#" -eq 1 ] || { echo "错误：reset-config 只支持可选参数 --yes。" >&2; exit 2; }; reset_config 0 ;;
+      --yes) [ "$#" -eq 2 ] || { echo "错误：reset-config 只支持可选参数 --yes。" >&2; exit 2; }; reset_config 1 ;;
+      *) echo "错误：reset-config 只支持可选参数 --yes。" >&2; exit 2 ;;
+    esac
+    ;;
+  uninstall)
+    case "${2:-}" in
+      '') [ "$#" -eq 1 ] || { echo "错误：uninstall 只支持可选参数 --purge。" >&2; exit 2; }; uninstall_service 0 ;;
+      --purge) [ "$#" -eq 2 ] || { echo "错误：uninstall 只支持可选参数 --purge。" >&2; exit 2; }; uninstall_service 1 ;;
+      *) echo "错误：uninstall 只支持可选参数 --purge。" >&2; exit 2 ;;
+    esac
+    ;;
+  *) echo "错误：未知命令：$COMMAND" >&2; usage >&2; exit 2 ;;
+esac

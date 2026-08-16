@@ -1,0 +1,30 @@
+# Local machine configuration
+local.properties
+*.local
+.env
+.env.*
+
+# Gradle and Android build output
+.gradle/
+**/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE metadata
+.idea/
+*.iml
+.vscode/
+
+# Local toolchain and generated release artifacts
+_tools/
+pack/
+
+# Runtime data and logs
+data/
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+

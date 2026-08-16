@@ -1,0 +1,7 @@
+<resources>
+    <string name="proxy_service_notification_title">WOL 代理服务</string>
+    <string name="proxy_service_stop">停止代理</string>
+    <string name="proxy_service_notification_channel">WOL 代理服务</string>
+    <string name="proxy_service_notification_channel_description">本机代理服务运行状态</string>
+    <string name="app_name">WOL 网络唤醒</string>
+</resources>

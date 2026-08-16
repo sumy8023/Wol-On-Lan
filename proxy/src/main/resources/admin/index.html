@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f5f7fa">
+  <title>WOL 代理管理</title>
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true">W</span>
+        <div>
+          <p class="eyebrow">NETWORK SERVICE</p>
+          <h1>WOL 代理管理</h1>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="header-status" class="status-chip status-neutral">检查中</span>
+        <button id="header-refresh" class="button button-quiet" type="button">刷新</button>
+        <button id="logout-button" class="button button-quiet hidden" type="button">退出</button>
+      </div>
+    </header>
+
+    <nav class="tabbar" aria-label="主导航">
+      <button class="tab-button is-active" type="button" data-view="overview">概览</button>
+      <button class="tab-button" type="button" data-view="config">代理配置</button>
+      <button class="tab-button" type="button" data-view="logs">运行日志</button>
+    </nav>
+
+    <main id="app-view" class="main-content hidden">
+      <section class="view-panel is-active" data-panel="overview" aria-labelledby="overview-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">SERVICE OVERVIEW</p>
+            <h2 id="overview-title">服务状态</h2>
+          </div>
+          <button id="overview-refresh" class="button button-secondary" type="button">刷新状态</button>
+        </div>
+
+        <div class="status-grid" aria-live="polite">
+          <article class="metric-block metric-primary">
+            <span class="metric-label">运行状态</span>
+            <strong id="metric-state">检查中</strong>
+            <span id="metric-state-detail" class="metric-detail">等待服务响应</span>
+          </article>
+          <article class="metric-block">
+            <span class="metric-label">版本</span>
+            <strong id="metric-version">--</strong>
+            <span class="metric-detail">代理服务</span>
+          </article>
+          <article class="metric-block">
+            <span class="metric-label">运行时长</span>
+            <strong id="metric-uptime">--</strong>
+            <span class="metric-detail">自上次启动</span>
+          </article>
+          <article class="metric-block">
+            <span class="metric-label">唤醒请求</span>
+            <strong id="metric-requests">--</strong>
+            <span class="metric-detail">服务累计</span>
+          </article>
+        </div>
+
+        <div class="info-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">RUNTIME</p>
+              <h3>运行信息</h3>
+            </div>
+          </div>
+          <dl class="info-list">
+            <div class="info-row"><dt>监听端口</dt><dd id="info-listen">--</dd></div>
+            <div class="info-row"><dt>配置文件</dt><dd id="info-config-path">--</dd></div>
+            <div class="info-row"><dt>日志文件</dt><dd id="info-log-path">--</dd></div>
+            <div class="info-row"><dt>管理入口</dt><dd id="info-admin-path">--</dd></div>
+            <div class="info-row"><dt>环境变量覆盖</dt><dd id="info-overrides">无</dd></div>
+          </dl>
+        </div>
+
+        <div id="overview-notice" class="notice notice-neutral" role="status">正在读取服务状态。</div>
+      </section>
+
+      <section class="view-panel" data-panel="config" aria-labelledby="config-title" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">YAML CONFIGURATION</p>
+            <h2 id="config-title">代理配置</h2>
+          </div>
+          <span id="config-state" class="status-chip status-neutral">未读取</span>
+        </div>
+
+        <form id="config-form" novalidate>
+          <fieldset class="form-section">
+            <legend>网络与认证</legend>
+            <div class="form-grid">
+              <label class="field field-wide">
+                <span>监听端口</span>
+                <input id="config-listen" name="listen" type="number" inputmode="numeric" min="1" max="65535" step="1" autocomplete="off" placeholder="14250" required>
+                <small>填写 1-65535 之间的端口，例如 <code>14250</code>。</small>
+                <small id="docker-listen-help" class="docker-warning" hidden>当前运行在 Docker 中。修改端口后须同步修改 TCP 端口映射；WOL 广播请使用 host 网络，请注意！</small>
+              </label>
+              <label class="field field-wide">
+                <span>代理连接 Key</span>
+                <div class="input-with-action">
+                  <input id="config-key" name="key" type="password" autocomplete="new-password" placeholder="请输入连接 Key" required>
+                  <button id="toggle-key" class="input-action" type="button" aria-label="显示代理连接 Key">显示</button>
+                </div>
+                <small>用于 APK 请求签名，保存后立即应用。</small>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend>默认唤醒参数</legend>
+            <div class="form-grid form-grid-three">
+              <label class="field">
+                <span>默认广播地址</span>
+                <input id="config-broadcast" name="default_broadcast" type="text" inputmode="decimal" placeholder="255.255.255.255" required>
+              </label>
+              <label class="field">
+                <span>默认 UDP 端口</span>
+                <input id="config-port" name="default_port" type="number" min="1" max="65535" step="1" inputmode="numeric" required>
+              </label>
+              <label class="field">
+                <span>冷却时间（秒）</span>
+                <input id="config-cooldown" name="cooldown_seconds" type="number" min="0" max="86400" step="1" inputmode="numeric" required>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend>MAC 白名单</legend>
+            <label class="field">
+              <span>允许唤醒的 MAC</span>
+              <textarea id="config-macs" name="allow_macs" rows="5" spellcheck="false" placeholder="每行一个，例如 AA:BB:CC:DD:EE:FF"></textarea>
+              <small>留空表示允许所有 MAC 地址。</small>
+            </label>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend>管理入口</legend>
+            <div class="form-grid">
+              <label class="field">
+                <span>管理入口</span>
+                <div class="input-with-action">
+                  <span class="input-prefix">/</span>
+                  <input id="config-admin-path" name="admin_path" type="text" maxlength="64" minlength="4" pattern="[A-Za-z]{4,64}" inputmode="text" autocomplete="off" placeholder="自动生成" aria-describedby="admin-path-help" required>
+                  <button id="generate-admin-path" class="input-action" type="button">随机生成</button>
+                </div>
+                <small id="admin-path-help">至少 4 位，只能使用大小写字母；修改后旧入口会失效。</small>
+              </label>
+              <label class="field">
+                <span>管理令牌</span>
+                <div class="input-with-action">
+                  <input id="config-admin-token" name="admin_token" type="password" minlength="6" maxlength="256" pattern="[\x21-\x7E]{6,256}" autocomplete="new-password">
+                  <button id="generate-admin-token" class="input-action" type="button">随机生成</button>
+                </div>
+                <small>令牌已独立安全存储；留空保持不变，填写 6-256 位新令牌可立即替换。</small>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="form-actions">
+            <div class="config-transfer-actions">
+              <select id="config-transfer-format" class="config-format-select" aria-label="配置导入导出格式">
+                <option value="yaml" selected>YAML</option>
+                <option value="json">JSON</option>
+              </select>
+              <input id="import-config-file" type="file" accept=".yml,.yaml,.json,text/yaml,text/x-yaml,application/yaml,application/x-yaml,application/json" hidden>
+              <button id="import-config" class="button button-secondary" type="button">导入配置</button>
+              <button id="export-config" class="button button-secondary" type="button">导出配置</button>
+            </div>
+            <button id="reload-config" class="button button-secondary" type="button">重新读取</button>
+            <span id="config-form-message" class="form-message" role="status"></span>
+            <button id="save-config" class="button button-primary" type="submit">保存并应用</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="view-panel" data-panel="logs" aria-labelledby="logs-title" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">SERVICE LOG</p>
+            <h2 id="logs-title">运行日志</h2>
+          </div>
+          <div class="panel-heading-actions">
+            <label class="toggle-control"><input id="logs-auto-refresh" type="checkbox" checked><span>自动刷新</span></label>
+            <button id="logs-refresh" class="button button-secondary" type="button">刷新日志</button>
+          </div>
+        </div>
+
+        <form id="logs-filter" class="log-filter" novalidate>
+          <label class="field"><span>开始日期</span><input id="logs-from" type="date"></label>
+          <label class="field"><span>结束日期</span><input id="logs-to" type="date"></label>
+          <label class="field"><span>事件</span>
+            <select id="logs-event">
+              <option value="">全部事件</option>
+              <option value="已发送">唤醒已发送</option>
+              <option value="成功">连接成功</option>
+              <option value="失败">失败</option>
+              <option value="拒绝">拒绝</option>
+              <option value="服务">服务</option>
+            </select>
+          </label>
+          <label class="field field-search"><span>搜索</span><input id="logs-query" type="search" placeholder="MAC、来源或关键字"></label>
+          <label class="field"><span>每页条目</span>
+            <select id="logs-page-size">
+              <option value="50" selected>50</option>
+              <option value="80">80</option>
+              <option value="100">100</option>
+              <option value="150">150</option>
+              <option value="200">200</option>
+            </select>
+          </label>
+          <div class="filter-actions">
+            <button class="button button-primary" type="submit">筛选</button>
+            <button id="logs-clear" class="button button-quiet" type="button">清除</button>
+          </div>
+        </form>
+
+        <div class="log-toolbar">
+          <span id="logs-summary" class="muted-text">未加载日志</span>
+          <button id="logs-export" class="button button-quiet" type="button">导出当前结果</button>
+        </div>
+        <div id="logs-list" class="log-list" aria-live="polite">
+          <div class="empty-state">正在读取日志。</div>
+        </div>
+        <div class="log-pagination" aria-label="日志分页">
+          <button id="logs-prev" class="button button-secondary" type="button" disabled>上一页</button>
+          <span id="logs-page-status" class="muted-text">第 1 / 1 页</span>
+          <button id="logs-next" class="button button-secondary" type="button" disabled>下一页</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="loading-view" class="loading-view" role="status">
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <span>正在连接代理服务…</span>
+    </div>
+
+    <section id="login-view" class="login-view hidden" aria-labelledby="login-title">
+      <div class="login-panel">
+        <p class="eyebrow">ADMIN ACCESS</p>
+        <h2 id="login-title">管理入口</h2>
+        <p class="login-subtitle">请输入启动时生成的管理令牌</p>
+        <form id="login-form" novalidate>
+          <label class="field"><span>管理令牌</span><input id="login-password" type="password" minlength="6" maxlength="256" autocomplete="off" required></label>
+          <button class="button button-primary button-full" type="submit">进入管理后台</button>
+          <p id="login-message" class="form-message" role="alert"></p>
+        </form>
+      </div>
+    </section>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script src="./app.js" defer></script>
+</body>
+</html>

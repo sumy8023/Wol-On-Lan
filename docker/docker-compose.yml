@@ -1,0 +1,11 @@
+services:
+  wol-proxy:
+    image: wol-proxy:1.0.2
+    # WOL 魔术包是容器向局域网发出的 UDP 广播。host 网络让广播使用
+    # 宿主机网卡；仅映射 Web TCP 端口不会把容器的出站广播转发到局域网。
+    network_mode: host
+    restart: unless-stopped
+    command: ["--config", "/config/config.yml"]
+    volumes:
+      # 飞牛导入 Compose 后默认使用项目目录下的 data 文件夹；请保持读写。
+      - ./data:/config:rw
