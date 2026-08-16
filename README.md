@@ -182,10 +182,10 @@ pack/WOL-Proxy-Docker.tar
 6. Docker 必须使用可写 `/config` 挂载；Linux 升级前应备份 `/var/lib/wol-proxy`。
 7. 发行包来自 GitHub Releases，源码仓库不包含本地工具链和构建产物。
 
-## 发行版
-
-当前版本：[WOL ON LAN v1.0.2](https://github.com/sumy8023/Wol-On-Lan/releases/tag/v1.0.2)
-
 ## 许可证
 
-项目许可证尚未确定。添加许可证前，请不要将代码用于超出作者授权范围的再分发。
+本项目采用 [MIT License](LICENSE) 开源。
+
+## 免责声明
+
+本项目代码均由 AI 辅助开发，未经完整的专业安全审计或在所有目标环境中充分验证。因使用本项目产生的漏洞、安全性问题、数据丢失、服务中断或其他损失，由使用者自行评估并承担责任。本项目仅供学习和交流使用。
