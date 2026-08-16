@@ -12,10 +12,10 @@ $WindowsBuilder = Join-Path $RootDir 'windows\build.ps1'
 $DockerBuilder = Join-Path $RootDir 'docker\build-image.ps1'
 $PackDir = Join-Path $RootDir 'pack'
 
-$ApkOutput = Join-Path $PackDir 'WOL-网络唤醒.apk'
+$ApkOutput = Join-Path $PackDir 'WOL-Android.apk'
 $WindowsOutput = Join-Path $PackDir 'WOL-Proxy-Windows.exe'
-$DockerOutput = Join-Path $PackDir 'WOL-Proxy-Docker-Image.tar'
-$LinuxOutput = Join-Path $PackDir 'WOL-Proxy-Linux-sh.tar'
+$DockerOutput = Join-Path $PackDir 'WOL-Proxy-Docker.tar'
+$LinuxOutput = Join-Path $PackDir 'WOL-Proxy-Linux.tar'
 
 function Assert-File([string]$Path, [string]$Description) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {

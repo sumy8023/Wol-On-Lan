@@ -107,14 +107,14 @@ C:\Users\当前用户名\wol-proxy.log
 
 ## Linux 使用
 
-Linux 正式交付文件为 `pack/WOL-Proxy-Linux-sh.tar`，不再同时提供内容相同的 ZIP。
+Linux 正式交付文件为 `pack/WOL-Proxy-Linux.tar`，不再同时提供内容相同的 ZIP。
 
 压缩包只提供 `start-linux.sh` 安装入口、无扩展名的 `wol` 管理命令、代理程序文件、示例配置和 README。安装解析 helper 已内置到安装入口，不再作为独立用户入口分发；旧版 `uninstall-linux.sh` 也不会进入新包。
 
 安装包面向使用 systemd 的 Linux 发行版。解压后进入目录并运行安装入口：
 
 ```bash
-tar -xf WOL-Proxy-Linux-sh.tar
+tar -xf WOL-Proxy-Linux.tar
 cd wol-proxy
 ./start-linux.sh
 ```
@@ -172,10 +172,10 @@ wol uninstall --purge
 
 ## Docker 使用
 
-Docker 正式交付文件只有 `pack/WOL-Proxy-Docker-Image.tar`，不再生成 Docker 构建文件 ZIP，也不在 `pack` 放置 Compose、配置或子目录。直接导入镜像：
+Docker 正式交付文件只有 `pack/WOL-Proxy-Docker.tar`，不再生成 Docker 构建文件 ZIP，也不在 `pack` 放置 Compose、配置或子目录。直接导入镜像：
 
 ```bash
-docker load -i pack/WOL-Proxy-Docker-Image.tar
+docker load -i pack/WOL-Proxy-Docker.tar
 ```
 
 运行时应使用 host 网络，保证 UDP 广播能发到真实局域网。`docker/data/config.yml` 的 `key` 可以留空；首次启动或检测到已挂载配置中的 `key` 为空时，镜像会生成 24 位随机 KEY，写入 `/config/config.yml` 并只在本次控制台显示一次。把该 KEY 填入 APK 的代理节点即可；也可以预先填写 `key` 或设置 `WOL_PROXY_KEY`。

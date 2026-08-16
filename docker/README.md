@@ -1,6 +1,6 @@
 # WOL 代理服务 Docker 部署
 
-此目录与已构建的 `WOL-Proxy-Docker-Image.tar` 配套使用，不需要在 NAS 上重新构建镜像。
+此目录与已构建的 `WOL-Proxy-Docker.tar` 配套使用，不需要在 NAS 上重新构建镜像。
 
 ## 配置
 
@@ -11,7 +11,7 @@
 ## 导入并启动
 
 ```bash
-docker load -i WOL-Proxy-Docker-Image.tar
+docker load -i WOL-Proxy-Docker.tar
 docker compose up -d
 ```
 

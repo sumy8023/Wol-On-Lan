@@ -2,7 +2,7 @@
 param(
     [string]$JarFile = (Join-Path $PSScriptRoot '..\proxy\build\libs\wol-proxy.jar'),
     [string]$ConfigFile = (Join-Path $PSScriptRoot 'data\config.yml'),
-    [string]$OutputFile = (Join-Path $PSScriptRoot '..\pack\WOL-Proxy-Docker-Image.tar'),
+    [string]$OutputFile = (Join-Path $PSScriptRoot '..\pack\WOL-Proxy-Docker.tar'),
     [string]$ImageName = 'wol-proxy:1.0.2',
     [string]$BaseImage = 'eclipse-temurin:17-jre-jammy',
     [string]$CraneFile = (Join-Path $PSScriptRoot '..\_tools\crane-v0.21.9\crane.exe')

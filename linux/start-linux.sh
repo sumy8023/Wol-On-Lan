@@ -94,7 +94,7 @@ fi
 
 if [ ! -f "$SCRIPT_DIR/lib/wol-proxy.jar" ] || [ ! -f "$SCRIPT_DIR/bin/wol-proxy" ] || [ ! -f "$SCRIPT_DIR/wol" ]; then
   echo "错误：安装包不完整，缺少程序文件或 wol 管理命令。" >&2
-  echo "请从 WOL-Proxy-Linux-sh.tar 解压后的目录运行此脚本。" >&2
+  echo "请从 WOL-Proxy-Linux.tar 解压后的目录运行此脚本。" >&2
   exit 1
 fi
 
@@ -267,7 +267,7 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 if [ ! -d /run/systemd/system ]; then
   echo "错误：systemd 当前未作为系统服务管理器运行。" >&2
-  echo "容器环境请改用 pack/WOL-Proxy-Docker-Image.tar 镜像包。" >&2
+  echo "容器环境请改用 pack/WOL-Proxy-Docker.tar 镜像包。" >&2
   exit 1
 fi
 

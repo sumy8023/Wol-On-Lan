@@ -13,7 +13,7 @@
 .\scripts\build-packages.ps1
 ```
 
-输出文件为 `pack/WOL-Proxy-Linux-sh.tar`。解压后运行：
+输出文件为 `pack/WOL-Proxy-Linux.tar`。解压后运行：
 
 ```sh
 chmod +x start-linux.sh
