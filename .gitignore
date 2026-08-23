@@ -15,6 +15,8 @@ captures/
 .idea/
 *.iml
 .vscode/
+**/bin/
+**/obj/
 
 # Local toolchain and generated release artifacts
 _tools/
@@ -27,4 +29,3 @@ data/
 # OS metadata
 .DS_Store
 Thumbs.db
-

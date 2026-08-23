@@ -11,6 +11,21 @@
 应用名称为 `WOL 网络唤醒`，作者信息为 `Sumy`。
 当前 APK 与代理服务版本均为 `1.0.2`。
 
+## Android 11 手表客户端
+
+`watch/` 是独立的普通 Android 11 圆形手表 APK，包名为
+`com.example.wolquicktile.watch`，不覆盖手机端 `:app`。手表端只保存少量设备和代理节点，支持局域网 WOL、桌面代理 HMAC 请求、代理节点测试，以及一个标准 Android Quick Settings 磁贴。
+
+手表端不运行本机代理服务，不包含手机端分组、备份和 50 个磁贴。磁贴绑定手表端当前选中的设备；目标手表必须提供第三方 Quick Settings Tile 入口，磁贴是否可添加需要在实机验证。
+
+手表构建命令：
+
+```powershell
+.\_tools\gradle-8.9\bin\gradle.bat :watch:assembleDebug --no-daemon
+```
+
+输出为 `watch/build/outputs/apk/debug/watch-debug.apk`，统一打包后复制为 `pack/WOL-Watch.apk`。
+
 ## 当前关键需求
 
 - 默认分组名称是 `默认分组`，这是数据库真实分组，不是 UI 假分组。

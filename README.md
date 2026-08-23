@@ -16,7 +16,8 @@ WOL ON LAN 是一套跨平台 Wake-on-LAN（网络唤醒）工具，包含 Andro
 
 ```text
 .
-├── apk/       Android 客户端源码、资源和单元测试
+├── apk/       Android 手机客户端源码、资源和单元测试
+├── watch/     Android 11 圆形手表精简客户端和磁贴
 ├── proxy/     Windows/Linux/Docker 共用的 Java 代理核心、Web 后台和测试
 ├── windows/   Windows 便携启动器源码与 EXE 打包脚本
 ├── linux/     Linux 安装脚本、wol 维护命令和 shell 测试
@@ -27,7 +28,7 @@ WOL ON LAN 是一套跨平台 Wake-on-LAN（网络唤醒）工具，包含 Andro
 └── PROJECT_CONTEXT.md  当前实现约束和交付背景
 ```
 
-`local.properties`、`_tools/` 和 `pack/` 是本地配置、构建工具链和发行产物目录，不纳入源码仓库。正式成品发布在 [GitHub Releases](https://github.com/sumy8023/Wol-On-Lan/releases)。
+`local.properties`、`_tools/` 和 `pack/` 是本地配置、构建工具链和发行产物目录，不纳入源码仓库。正式成品发布在 [GitHub Releases](https://github.com/sumy8023/Wol-On-Lan/releases)。手表客户端单独输出为 `WOL-Watch.apk`，不会覆盖手机端 APK。
 
 ## 快速开始
 
@@ -135,7 +136,7 @@ admin_path: ""
 - Windows EXE 需要 .NET 10 SDK
 - Docker 镜像构建需要 Docker Engine
 
-不要提交 `local.properties`。在本机配置 Android SDK 路径即可；项目通过 `settings.gradle.kts` 管理 `app` 和 `wol-proxy` 模块。
+不要提交 `local.properties`。在本机配置 Android SDK 路径即可；项目通过 `settings.gradle.kts` 管理 `app`、`watch` 和 `wol-proxy` 模块。
 
 ### 编译与测试
 
@@ -143,6 +144,7 @@ admin_path: ""
 .\gradlew.bat test
 .\gradlew.bat :app:testDebugUnitTest
 .\gradlew.bat :wol-proxy:test
+.\gradlew.bat :watch:test
 ```
 
 Linux 安装脚本的纯 shell 测试：
@@ -151,7 +153,7 @@ Linux 安装脚本的纯 shell 测试：
 ./gradlew :wol-proxy:testLinuxInstaller
 ```
 
-Android 源码位于 `apk/src/main`，代理核心位于 `proxy/src/main`。修改协议、签名或配置字段时，应同时更新 Android 客户端、代理测试和 `proxy/config.example.yml`。
+Android 手机源码位于 `apk/src/main`，Android 11 手表源码位于 `watch/src/main`，代理核心位于 `proxy/src/main`。修改协议、签名或配置字段时，应同时更新客户端、代理测试和 `proxy/config.example.yml`。
 
 ## 统一打包
 
@@ -165,12 +167,13 @@ Android 源码位于 `apk/src/main`，代理核心位于 `proxy/src/main`。修�
 
 ```text
 pack/WOL-Android.apk
+pack/WOL-Watch.apk
 pack/WOL-Proxy-Windows.exe
 pack/WOL-Proxy-Linux.tar
 pack/WOL-Proxy-Docker.tar
 ```
 
-脚本默认从 `_tools/` 查找 JDK、Android SDK 和 Gradle。若使用系统工具链，请检查 `JAVA_HOME`、`ANDROID_HOME`、Gradle 和 `PATH`，并确认 APK 签名校验工具可用。构建完成后应核对 APK 签名、Docker 镜像标签和四个文件的大小，再上传到 GitHub Release。
+脚本默认从 `_tools/` 查找 JDK、Android SDK 和 Gradle。若使用系统工具链，请检查 `JAVA_HOME`、`ANDROID_HOME`、Gradle 和 `PATH`，并确认 APK 签名校验工具可用。构建完成后应核对 APK 签名、Docker 镜像标签和五个文件的大小，再上传到 GitHub Release。
 
 ## 部署注意事项
 

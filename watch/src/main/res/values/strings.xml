@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">WOL唤醒</string>
+    <string name="tile_label">WOL 唤醒</string>
+</resources>

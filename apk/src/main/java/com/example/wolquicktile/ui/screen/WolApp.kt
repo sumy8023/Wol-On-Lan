@@ -1011,26 +1011,17 @@ private fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text("项目地址", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            modifier = Modifier.fillMaxWidth(0.85f),
-                            onClick = { uriHandler.openUri(PROJECT_URL) }
-                        ) {
-                            Text(PROJECT_URL, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Spacer(Modifier.width(6.dp))
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("项目地址：", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        TextButton(onClick = { uriHandler.openUri(PROJECT_URL) }) {
+                            Text("点击跳转")
                         }
-                        IconButton(
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(PROJECT_URL))
-                                Toast.makeText(context, "项目地址已复制", Toast.LENGTH_SHORT).show()
-                            }
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "复制项目地址")
+                        Spacer(Modifier.width(16.dp))
+                        TextButton(onClick = {
+                            clipboardManager.setText(AnnotatedString(PROJECT_URL))
+                            Toast.makeText(context, "项目地址已复制", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text("复制地址")
                         }
                     }
                 }
